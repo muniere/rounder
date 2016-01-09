@@ -1,0 +1,124 @@
+#
+# Extension 
+#
+class File
+  #
+  # Join and fill path
+  #
+  def self.expand_join(*item)
+    File.expand_path(File.join(item))
+  end
+
+  #
+  # Get purename of file
+  #
+  def self.purename(path)
+    File.basename(path, File.extname(path))
+  end
+end
+
+module Kernel
+  #
+  # Execute command with verbose
+  #
+  def system_v(command)
+    STDERR.puts("==> #{command}")
+    Kernel.system(command)
+    Kernel.exit($?.exitstatus) unless $?.success?
+  end
+end
+
+#
+# Globals
+#
+def app
+  "rounder"
+end
+
+def bindir_g
+  '<%= bindir %>'
+end
+def bindir_l
+  'bin'
+end
+
+def binfiles 
+  Dir.glob(File.join(bindir_l, '*'))
+end
+
+#
+# Tasks
+#
+desc "Build app into #{bindir_l}"
+task :build do
+  unless File.exists?(bindir_l)
+    Kernel.system_v("mkdir #{bindir_l}") 
+  end
+
+  Kernel.system_v("mix deps.update --all")
+  Kernel.system_v("mix escript.build")
+
+  Kernel.system_v("mv -v #{app} #{File.join(bindir_l, app)}")
+end
+
+desc "Install apps into #{File.expand_join(bindir_g)}"
+task :install do
+  binfiles
+    .map { |f| File.purename(f) }
+    .map { |b| [File.expand_join(bindir_l, b), File.expand_join(bindir_g, b)] }
+    .each do |src, dst|
+      Kernel.system_v("cp -v #{src} #{dst}") unless File.identical?(src, dst)
+    end
+end
+
+desc "Uninstall apps from #{File.expand_join(bindir_g)}"
+task :uninstall do
+  binfiles
+    .map { |f| File.purename(f) }
+    .map { |b| File.expand_join(bindir_g, b) }
+    .each do |dst|
+      Kernel.system_v("rm -v #{dst}") if File.exists?(dst)
+    end
+end
+
+desc "Link app into #{File.expand_join(bindir_g)}"
+task :link do
+  binfiles
+    .map { |f| File.purename(f) }
+    .map { |b| [File.expand_join(bindir_l, b), File.expand_join(bindir_g, b)] }
+    .each do |src, dst|
+      Kernel.system_v("ln -sfv #{src} #{dst}") unless File.identical?(src, dst)
+    end
+end
+
+desc "Unlink app from #{File.expand_join(bindir_g)}"
+task :unlink do
+  binfiles
+    .map { |f| File.purename(f) }
+    .map { |b| File.expand_join(bindir_g, b) }
+    .each do |dst|
+      Kernel.system_v("rm -v #{dst}") if File.exists?(dst)
+    end
+end
+
+desc "Show status of app in #{File.expand_join(bindir_g)}"
+task :status do
+  binfiles
+    .map { |f| File.purename(f) }
+    .map { |b| File.expand_join(bindir_g, b) }
+    .each do |dst|
+      Kernel.system("ls -lFG #{dst}") if File.exists?(dst)
+    end
+end
+
+desc "Cleanup app and tempfiles"
+task :clean do
+  Kernel.system_v("mix clean")
+end
+
+desc "Run test"
+task :test do
+  Kernel.system_v("mix test")
+end
+
+task :default => 'build'
